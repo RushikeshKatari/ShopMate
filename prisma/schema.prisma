@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  shops        Shop[]
+}
+
+model Shop {
+  id                 String              @id @default(uuid())
+  name               String
+  ownerId            String
+  phone              String?
+  address            String?
+  currency           String              @default("INR")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  owner              User                @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  products           Product[]
+  customers          Customer[]
+  transactions       Transaction[]
+  inventoryMovements InventoryMovement[]
+  payments           Payment[]
+  aiCommands         AICommand[]
+  notifications      Notification[]
+  settings           Setting?
+}
+
+model Product {
+  id                 String              @id @default(uuid())
+  shopId             String
+  name               String
+  category           String              @default("General")
+  unit               String              @default("kg") // kg, g, litre, ml, piece, packet, box, dozen
+  currentStock       Float               @default(0)
+  minimumStock       Float               @default(5)
+  purchasePrice      Float               @default(0)
+  sellingPrice       Float               @default(0)
+  profitAmount       Float               @default(0)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  shop               Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  transactions       Transaction[]
+  inventoryMovements InventoryMovement[]
+}
+
+model Customer {
+  id                 String        @id @default(uuid())
+  shopId             String
+  name               String
+  phone              String?
+  outstandingBalance Float         @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  shop               Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  transactions       Transaction[]
+  payments           Payment[]
+}
+
+model Transaction {
+  id                 String              @id @default(uuid())
+  shopId             String
+  type               String              // PURCHASE, SALE, CREDIT_SALE, PAYMENT, STOCK_ADJUSTMENT, PRICE_CHANGE
+  productId          String?
+  customerId         String?
+  quantity           Float?
+  unit               String?
+  amount             Float               @default(0)
+  paymentMethod      String              @default("CASH") // CASH, UPI, CREDIT, OTHER
+  description        String?
+  source             String              @default("VOICE") // VOICE, TEXT, MANUAL, SYSTEM
+  status             String              @default("COMPLETED") // COMPLETED, PENDING, CANCELLED, REJECTED
+  createdAt          DateTime            @default(now())
+  shop               Shop                @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  product            Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  customer           Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  inventoryMovements InventoryMovement[]
+  payments           Payment[]
+}
+
+model InventoryMovement {
+  id                     String       @id @default(uuid())
+  shopId                 String
+  productId              String
+  type                   String       // PURCHASE, SALE, ADJUSTMENT, RETURN
+  quantity               Float
+  previousStock          Float
+  newStock               Float
+  referenceTransactionId String?
+  createdAt              DateTime     @default(now())
+  shop                   Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  product                Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  transaction            Transaction? @relation(fields: [referenceTransactionId], references: [id], onDelete: SetNull)
+}
+
+model Payment {
+  id                String       @id @default(uuid())
+  shopId            String
+  customerId        String?
+  transactionId     String?
+  amount            Float
+  method            String       @default("UPI") // CASH, UPI, OTHER
+  status            String       @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED
+  provider          String       @default("SIMULATED_UPI")
+  providerReference String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  shop              Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customer          Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  transaction       Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+}
+
+model AICommand {
+  id             String   @id @default(uuid())
+  shopId         String
+  rawText        String
+  intent         String
+  structuredData String   // JSON string
+  confidence     Float    @default(1.0)
+  status         String   @default("EXECUTED") // PENDING, VALIDATED, EXECUTED, REJECTED, FAILED
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  shopId    String
+  type      String   // LOW_STOCK, PAYMENT, SYSTEM, AI
+  title     String
+  message   String
+  severity  String   @default("INFO") // INFO, WARNING, CRITICAL
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model Setting {
+  id                     String   @id @default(uuid())
+  shopId                 String   @unique
+  shopName               String   @default("My Shop")
+  language               String   @default("en-IN")
+  currency               String   @default("INR")
+  voiceEnabled           Boolean  @default(true)
+  voiceResponseEnabled   Boolean  @default(true)
+  lowStockNotifications  Boolean  @default(true)
+  offlineMode            Boolean  @default(false)
+  updatedAt              DateTime @updatedAt
+  shop                   Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
