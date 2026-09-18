@@ -6,7 +6,7 @@ export async function POST(req: Request) {
   try {
     const session = await requireShopSession();
     const body = await req.json();
-    const { text, conversationState, confirmExecution } = body;
+    const { text, conversationState, confirmExecution, language } = body;
 
     if (!text || typeof text !== "string" || !text.trim()) {
       return NextResponse.json(
@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     const response = await AICommandService.processCommand({
       shopId: session.shopId,
       text: text.trim(),
+      language,
       conversationState,
       confirmExecution,
     });

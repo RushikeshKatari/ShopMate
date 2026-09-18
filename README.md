@@ -101,6 +101,15 @@ ShopMate executes the 3-stage RAG loop, enforces financial and inventory sanity 
 | **Offline Storage** | IndexedDB with automatic background sync queue |
 | **Testing** | Vitest automated test suite (22 tests, 100% passing) |
 
+### Optional small local LLM
+
+ShopMate uses deterministic parsing first for every shop operation. A bundled
+`Qwen2.5-0.5B-Instruct-Q4_K_M.gguf` model may be enabled only in a compatible
+Android/iOS native shell for unfamiliar or casual phrasing. It is loaded on
+demand, never calls a cloud API or Ollama, and cannot update stock, khata, or
+financial records directly; all writes remain subject to ShopMate validation
+and confirmation.
+
 ---
 
 ## 🚀 Quick Setup & Running Locally

@@ -10,6 +10,112 @@ export class LocalNLPProvider implements AIProvider {
   name = "ShopMate Local NLP Engine (English + Telugu / 100% On-Device)";
 
   private readonly teluguSynonyms: Record<string, string> = {
+    // Native Telugu Script - Products
+    "బాస్మతి బియ్యం": "rice",
+    "బాస్మతి": "rice",
+    "బియ్యం": "rice",
+    "చక్కెర": "sugar",
+    "పంచదార": "sugar",
+    "వంట నూనె": "oil",
+    "నువ్వుల నూనె": "oil",
+    "నూనె": "oil",
+    "గోధుమ పిండి": "flour",
+    "పిండి": "flour",
+    "గోధుమలు": "wheat",
+    "టీ పొడి": "tea",
+    "టీ ఆకులు": "tea",
+    "టీ": "tea",
+    "చాయ్": "tea",
+    "బిస్కెట్లు": "biscuit",
+    "బిస్కెట్": "biscuit",
+    "ఉప్పు": "salt",
+    "మిరియాలు": "pepper",
+    "కారం పొడి": "chilli powder",
+    "కారం": "chilli powder",
+    "పసుపు పొడి": "turmeric",
+    "పసుపు": "turmeric",
+    "శనగపప్పు": "chana dal",
+    "కందిపప్పు": "toor dal",
+    "పెసరపప్పు": "moong dal",
+    "పప్పు": "dal",
+    "రవ్వ": "semolina",
+    "సేమియా": "vermicelli",
+    "అటుకులు": "poha",
+    "నెయ్యి": "ghee",
+    "పాల పొడి": "milk powder",
+    "పాలు": "milk",
+    "సబ్బు": "soap",
+    "సబ్బులు": "soap",
+
+    // Native Telugu Script - Actions & Intents
+    "కొనుగోలు చేశాను": "bought",
+    "కొనుగోలు": "bought",
+    "కొన్నాను": "bought",
+    "తీసుకున్నాను": "bought",
+    "స్టాక్ వచ్చింది": "bought",
+    "అమ్మకం జరిగింది": "sold",
+    "అమ్మకం": "sold",
+    "అమ్మాము": "sold",
+    "అమ్మాను": "sold",
+    "అమ్మేసాను": "sold",
+    "అమ్మివేసాను": "sold",
+    "ఖాతాలో": "khata",
+    "ఖాతా": "khata",
+    "అప్పుగా": "credit",
+    "అప్పు": "credit",
+    "తీసుకున్నాడు": "credit",
+    "తీసుకున్నారు": "credit",
+    "చెల్లింపు చేశాడు": "paid",
+    "చెల్లింపు": "paid",
+    "చెల్లించాడు": "paid",
+    "డబ్బులు ఇచ్చాడు": "paid",
+    "ఇచ్చాడు": "paid",
+    "ఇచ్చారు": "paid",
+    "బాకీ ఎంత": "balance",
+    "బాకీ": "balance",
+    "ధర ఎంత": "price",
+    "రేటు ఎంత": "price",
+    "ధర చెప్పు": "price",
+    "ధర": "price",
+    "రేటు": "price",
+    "ధర పెట్టు": "set price",
+    "రేటు పెట్టు": "set price",
+    "లాభం ఎంత": "profit",
+    "లాభం": "profit",
+    "స్టాక్ ఎంత ఉంది": "stock",
+    "ఎంత స్టాక్ ఉంది": "stock",
+    "స్టాక్ ఎంత": "stock",
+    "స్టాక్ చూడు": "stock",
+    "స్టాక్": "stock",
+    "మిగిలి ఉంది": "left",
+    "మిగిలింది": "left",
+    "కనీస స్టాక్": "maintain minimum",
+    "మినిమమ్ స్టాక్": "maintain minimum",
+    "నేటి అమ్మకాలు": "today sales",
+    "ఈరోజు అమ్మకాలు": "today sales",
+    "ఈరోజు వ్యాపారం": "today sales",
+    "ఈరోజు లాభం": "profit today",
+    "తక్కువ స్టాక్": "low stock",
+    "అయిపోయిన స్టాక్": "out of stock",
+    "వస్తువుల జాబితా": "all products",
+
+    // Native Telugu Units
+    "కేజీలు": "kg",
+    "కేజీ": "kg",
+    "కిలోలు": "kilo",
+    "కిలో": "kilo",
+    "లీటర్లు": "litre",
+    "లీటర్": "litre",
+    "ప్యాకెట్లు": "packet",
+    "ప్యాకెట్": "packet",
+    "డజన్లు": "dozen",
+    "డజన్": "dozen",
+    "గ్రాములు": "g",
+    "గ్రాము": "g",
+    "రూపాయలకు": "rupees",
+    "రూపాయలు": "rupees",
+    "రూ.": "rupees",
+    "రూ": "rupees",
     // Products
     "biyyam": "rice",
     "baas mati": "rice",
@@ -99,10 +205,17 @@ export class LocalNLPProvider implements AIProvider {
 
   private normalizeText(raw: string): string {
     let text = raw.toLowerCase().trim();
+
+    // Convert Telugu digits (౦-౯) to standard digits (0-9)
+    const teluguDigits = ["౦", "౧", "౨", "౩", "౪", "౫", "౬", "౭", "౮", "౯"];
+    teluguDigits.forEach((d, idx) => {
+      text = text.replace(new RegExp(d, "g"), idx.toString());
+    });
+
     const entries = Object.entries(this.teluguSynonyms).sort(([a], [b]) => b.length - a.length);
     for (const [tel, eng] of entries) {
       const escaped = tel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      text = text.replace(new RegExp(escaped, "gi"), eng);
+      text = text.replace(new RegExp(escaped, "gi"), ` ${eng} `);
     }
     text = text
       .replace(/\bkilu\b/gi, "kilo")
@@ -112,15 +225,96 @@ export class LocalNLPProvider implements AIProvider {
       .replace(/\bpakalu\b/gi, "packet")
       .replace(/\bnagu\b/gi, "piece")
       .replace(/\bgrama\b/gi, "g")
-      .replace(/\bgrammulu\b/gi, "g");
+      .replace(/\bgrammulu\b/gi, "g")
+      .replace(/\s+/g, " ")
+      .trim();
     return text;
   }
 
+  private isTeluguQuery(rawText: string, context: AIContext): boolean {
+    if (context.language === "te-IN") return true;
+    if (/[\u0C00-\u0C7F]/.test(rawText)) return true;
+    return /\b(biyyam|ammanu|konnanu|dhara|bakaya|chellimpu|udharo|labham|ammayi|chesadu|icchaadu|namaskaram|enta|migili|neti|pindi|nune|chekkera)\b/i.test(rawText);
+  }
+
   async parseCommand(rawText: string, context: AIContext): Promise<AICommandResult> {
+    const isTelugu = this.isTeluguQuery(rawText, context);
     const text = this.normalizeText(rawText.trim());
     const lower = text.toLowerCase();
+    const rawLower = rawText.toLowerCase().trim();
 
-    // 0. Multi-turn conversation memory
+    // 0. Conversational Confirmation & Cancellation (Voice-Driven)
+    if (
+      /^(yes|yep|yeah|sure|confirm|record it|proceed|okay|ok|avunu|ha|haan|sare|cheyyi|సరే|అవును|నమోదు చేయండి|చేయండి|రికార్డ్ చేయి)$/i.test(rawLower) ||
+      /^(yes please|ha record cheyyi|avunu record cheyyi|ha sare|avunu cheyyi)$/i.test(rawLower)
+    ) {
+      return {
+        intent: "confirm_action",
+        confidence: 1.0,
+        entities: {},
+        requires_confirmation: false,
+        speech_response: "Confirmed. Recording now.",
+        speech_response_telugu: "సరే! నమోదు చేస్తున్నాను.",
+        is_telugu: isTelugu,
+      };
+    }
+
+    if (
+      /^(no|cancel|stop|don't|abort|vaddu|odhu|vadhu|వద్దు|రద్దు చేయండి|ఆపండి|వద్దు రద్దు చేయి)$/i.test(rawLower) ||
+      /^(no cancel|vaddu odhu|cancel cheyyi)$/i.test(rawLower)
+    ) {
+      return {
+        intent: "cancel_action",
+        confidence: 1.0,
+        entities: {},
+        requires_confirmation: false,
+        speech_response: "Cancelled. Nothing was changed in your shop records.",
+        speech_response_telugu: "రద్దు చేయబడింది. మీ షాప్ రికార్డులలో ఎటువంటి మార్పులు చేయలేదు.",
+        is_telugu: isTelugu,
+      };
+    }
+
+    // 0b. Conversational Greeting
+    if (/^(hello|hi|hey|namaste|namaskar|namaskaram|namaskaramu|హలో|నమస్కారం|నమస్తే|బాగున్నారా)/i.test(rawLower)) {
+      return {
+        intent: "greeting",
+        confidence: 0.99,
+        entities: {},
+        requires_confirmation: false,
+        speech_response: `Hello! I'm ShopMate, your kirana assistant for ${context.shopName}. How can I help you with your sales, khata, or stock today?`,
+        speech_response_telugu: `నమస్కారం! నేను ${context.shopName} కిరాణా AI సహాయకుడిని. అమ్మకాలు, కొనుగోళ్లు లేదా ఖాతా వివరాల కోసం నన్ను అడగండి.`,
+        is_telugu: isTelugu,
+      };
+    }
+
+    // 0c. Conversational Help
+    if (/^(help|what can you do|who are you|how to use|features|sahayam|సహాయం|మీరు ఏమి చేయగలరు|ఎలా ఉపయోగించాలి)/i.test(rawLower)) {
+      return {
+        intent: "help",
+        confidence: 0.99,
+        entities: {},
+        requires_confirmation: false,
+        speech_response: "You can tell me to record sales, purchases, customer khata credit, payments, or ask about product prices, remaining stock, and today's profit.",
+        speech_response_telugu: "మీరు సరుకుల అమ్మకాలు, కొనుగోళ్లు, కస్టమర్ ఖాతా, చెల్లింపులు నమోదు చేయవచ్చు లేదా స్టాక్, ధర మరియు నేటి లాభం వివరాలు తెలుసుకోవచ్చు.",
+        is_telugu: isTelugu,
+      };
+    }
+
+    // 0d. Business Health Overview
+    if (/(business overview|how is business|shop status|dukanam ela undi|vyaparam ela undi|వ్యాపారం ఎలా ఉంది|దుకాణం పరిస్థితి|నేటి వ్యాపార సారాంశం)/i.test(rawLower) ||
+        /(business report|shop summary|overall status)/i.test(lower)) {
+      return {
+        intent: "business_overview",
+        confidence: 0.99,
+        entities: {},
+        requires_confirmation: false,
+        speech_response: "Here is your business overview for today.",
+        speech_response_telugu: "ఈరోజు మీ దుకాణ వ్యాపార సారాంశం ఇక్కడ ఉంది.",
+        is_telugu: isTelugu,
+      };
+    }
+
+    // 0e. Multi-turn conversation memory
     if (context.conversationState?.pendingIntent) {
       const state = context.conversationState;
       const entities = { ...(state.pendingEntities || {}) };
@@ -174,6 +368,22 @@ export class LocalNLPProvider implements AIProvider {
           }
         }
       }
+
+      if (state.missingSlot === "amount") {
+        const amountMatch = text.match(/(?:₹|rs\.?|rupees?)?\s*(\d+(?:\.\d+)?)/i);
+        if (amountMatch && state.pendingIntent === "record_purchase" && entities.product_name && entities.quantity) {
+          const totalAmount = parseFloat(amountMatch[1]);
+          const unit = entities.unit || "kg";
+          const costPerUnit = Math.round((totalAmount / entities.quantity) * 100) / 100;
+          return {
+            intent: "record_purchase",
+            confidence: 0.98,
+            entities: { ...entities, unit, total_amount: totalAmount, purchase_price_per_unit: costPerUnit },
+            requires_confirmation: false,
+            speech_response: `${entities.quantity} ${unit} of ${entities.product_name} costs ₹${totalAmount}, or ₹${costPerUnit} per ${unit}.`,
+          };
+        }
+      }
     }
 
     // 1. Ambiguous (no quantity)
@@ -207,6 +417,24 @@ export class LocalNLPProvider implements AIProvider {
     }
 
     // 2. PURCHASE
+    if (/(bought|purchased|kharida|buy|purchase|stock in|mangwaya|konnanu|mangayam|teesukonna)/i.test(lower)) {
+      const product = this.findProductInText(text, context.products);
+      const qtyMatch = text.match(/(\d+(?:\.\d+)?)\s*(kilos?|kg|litres?|l|packets?|pieces?|box|dozen|g|ml)?/i);
+      if (product && qtyMatch && !/(for|at|₹|rs\.?|rupees?|mein|ki)\s*₹?\s*\d+/i.test(text)) {
+        const quantity = parseFloat(qtyMatch[1]);
+        const unit = qtyMatch[2] ? this.normalizeUnit(qtyMatch[2]) : product.unit;
+        return {
+          intent: "record_purchase",
+          confidence: 0.96,
+          entities: { product_name: product.name, quantity, unit },
+          requires_confirmation: false,
+          clarification_question: `For how many rupees did you buy ${quantity} ${unit} of ${product.name}?`,
+          speech_response: `For how many rupees did you buy ${quantity} ${unit} of ${product.name}?`,
+          speech_response_telugu: `${quantity} ${unit} ${product.name} ను ఎన్ని రూపాయలకు కొన్నారు?`,
+          is_telugu: isTelugu,
+        };
+      }
+    }
     if (
       /(bought|purchased|kharida|buy|purchase|stock in|mangwaya|konnanu|mangayam|teesukonna)/i.test(lower) &&
       /(for|at|rs\.?|₹|in|rup|rupee|mein|ki)/i.test(lower)
@@ -227,6 +455,8 @@ export class LocalNLPProvider implements AIProvider {
           entities: { product_name: product.name, quantity: qty, unit, total_amount: amount, purchase_price_per_unit: unitPrice },
           requires_confirmation: false,
           speech_response: `Recorded. ${product.name} stock increased by ${qty} ${unit}. Purchase price: ₹${unitPrice}/${unit}.`,
+          speech_response_telugu: `${product.name} ${qty} ${unit} కొనుగోలు మొత్తం ₹${amount}. ఒక్కో ${unit} ధర ₹${unitPrice}.`,
+          is_telugu: isTelugu,
         };
       }
     }
@@ -269,7 +499,24 @@ export class LocalNLPProvider implements AIProvider {
       }
     }
 
-    // 4. PRICE QUERY
+    // 4. Database-grounded shop questions
+    if (/(which.*(low|running low)|low.stock|reorder)/i.test(lower)) {
+      return { intent: "get_low_stock", confidence: 0.98, entities: {}, requires_confirmation: false };
+    }
+    if (/(out of stock|out.of.stock|zero stock)/i.test(lower)) {
+      return { intent: "get_out_of_stock", confidence: 0.98, entities: {}, requires_confirmation: false };
+    }
+    if (/(what stock do we have|show.*products|all products|show inventory)/i.test(lower)) {
+      return { intent: "list_products", confidence: 0.98, entities: {}, requires_confirmation: false };
+    }
+    if (/(who owes|pending khata|pending payments|money.*pending)/i.test(lower)) {
+      return { intent: "get_khata_summary", confidence: 0.98, entities: {}, requires_confirmation: false };
+    }
+    if (/(profit.*today|today.*profit|earn.*today)/i.test(lower)) {
+      return { intent: "get_profit_summary", confidence: 0.98, entities: { period: "today" }, requires_confirmation: false };
+    }
+
+    // 5. PRICE QUERY
     if (/(price|rate|bhav|cost|kitne ka|kitna rate|dhara|enta dhara|dhara cheppu)/i.test(lower)) {
       const product = this.findProductInText(text, context.products);
       if (product) {
@@ -297,7 +544,7 @@ export class LocalNLPProvider implements AIProvider {
       }
     }
 
-    // 5. CREDIT SALE (checked before balance query so product+quantity takes precedence)
+    // 6. CREDIT SALE (checked before balance query so product+quantity takes precedence)
     if (/(khata|credit|udhaar|baaki|pay later|hisab mein|udharo|abbayi|bayataki)/i.test(lower)) {
       const customer = this.findCustomerInText(text, context.customers);
       const product = this.findProductInText(text, context.products);
@@ -336,7 +583,7 @@ export class LocalNLPProvider implements AIProvider {
       }
     }
 
-    // 6. PAYMENT
+    // 7. PAYMENT
     if (/(paid|pay|diya|chuka diya|jama kiya|gave|received|chellimpu|chesadu|icchaadu|icchari)/i.test(lower)) {
       const customer = this.findCustomerInText(text, context.customers);
       const amountMatch = text.match(/(?:₹|rs\.?|rupees?)?\s*(\d+(?:\.\d+)?)/i);
@@ -361,7 +608,7 @@ export class LocalNLPProvider implements AIProvider {
       }
     }
 
-    // 7. CASH SALE
+    // 8. CASH SALE
     if (/(sold|becha|sell|bik gaya|cash sale|ammanu|ammai|ammina)/i.test(lower)) {
       const product = this.findProductInText(text, context.products);
       const qtyMatch = text.match(/(\d+(?:\.\d+)?)\s*(kilos?|kg|litres?|l|packets?|pieces?|box|dozen|g|ml)?/i);
@@ -380,7 +627,7 @@ export class LocalNLPProvider implements AIProvider {
       }
     }
 
-    // 8. MINIMUM STOCK
+    // 9. MINIMUM STOCK
     if (/(maintain minimum|minimum stock|min stock|kam se kam|konika stock)/i.test(lower)) {
       const product = this.findProductInText(text, context.products);
       const qtyMatch = text.match(/(\d+(?:\.\d+)?)\s*(kilos?|kg|litres?|l|packets?|pieces?|box|dozen|g|ml)?/i);
@@ -396,13 +643,16 @@ export class LocalNLPProvider implements AIProvider {
       }
     }
 
-    // 9. DAILY SUMMARY
+    // 10. DAILY SUMMARY
     if (/(today.*sale|daily sales|aaj ki bikri|total sales today|neti ammakalu|neti bikri|daily report)/i.test(lower)) {
       return {
         intent: "get_daily_sales",
         confidence: 0.98,
         entities: {},
         requires_confirmation: false,
+        speech_response: "Retrieving today's sales summary.",
+        speech_response_telugu: "ఈరోజు అమ్మకాల సారాంశాన్ని తీసుకువస్తున్నాను.",
+        is_telugu: isTelugu,
       };
     }
 
@@ -412,9 +662,12 @@ export class LocalNLPProvider implements AIProvider {
       confidence: 0.3,
       entities: { raw: rawText },
       requires_confirmation: false,
-      clarification_question:
-        "Sorry, I couldn't understand. Try: 'Bought 10 kg rice for ₹520', '5 kilu biyyam ammanu', or 'Ramesh ₹124 chellimpu chesadu'.",
+      clarification_question: isTelugu
+        ? "క్షమించండి, అర్థం కాలేదు. ప్రయత్నించండి: '10 కేజీల బియ్యం ₹520 కి కొన్నాను', 'రమేష్ 2 కేజీల బియ్యం ఖాతాలో తీసుకున్నాడు', లేదా 'రమేష్ బాకీ ఎంత?'."
+        : "Sorry, I couldn't understand. Try: 'Bought 10 kg rice for ₹520', '10 kilu biyyam konnanu', or 'Ramesh ₹124 chellimpu chesadu'.",
       speech_response: "Sorry, I couldn't understand that. Please try again.",
+      speech_response_telugu: "క్షమించండి, మీ ఆదేశం అర్థం కాలేదు. దయచేసి మళ్ళీ చెప్పండి.",
+      is_telugu: isTelugu,
     };
   }
 
@@ -444,8 +697,27 @@ export class LocalNLPProvider implements AIProvider {
       if (lower.includes(cName)) return c;
       const firstName = cName.split(" ")[0];
       if (lower.includes(firstName)) return c;
+
+      // Shop owners often speak/type customer names in Telugu while the
+      // existing khata ledger stores the name in Latin script. This small,
+      // deterministic phonetic matcher covers the common customer names and
+      // still returns the canonical database name rather than inventing one.
+      const teluguFirstName = this.toTeluguCustomerAlias(firstName);
+      if (teluguFirstName && lower.includes(teluguFirstName)) return c;
     }
     return null;
+  }
+
+  private toTeluguCustomerAlias(name: string): string | null {
+    const aliases: Record<string, string> = {
+      ramesh: "రమేష్",
+      suresh: "సురేష్",
+      ravi: "రవి",
+      rajesh: "రాజేష్",
+      lakshmi: "లక్ష్మి",
+      srinivas: "శ్రీనివాస్",
+    };
+    return aliases[name] ?? null;
   }
 
   private normalizeUnit(rawUnit: string): string {

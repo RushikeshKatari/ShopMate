@@ -17,12 +17,33 @@ import {
 } from "lucide-react";
 import { formatCurrency, SUPPORTED_UNITS } from "@/lib/utils";
 
+const DEFAULT_CATEGORIES = [
+  "General",
+  "Grains & Rice",
+  "Pulses & Dal",
+  "Edible Oils & Ghee",
+  "Spices & Masala",
+  "Dairy & Eggs",
+  "Snacks & Biscuits",
+  "Beverages & Tea",
+  "Personal Care",
+  "Household Cleaning",
+  "Dry Fruits & Nuts",
+  "Electronics & Appliances",
+  "Vegetables & Fruits",
+];
+
 export default function InventoryPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+
+  // Category selection & custom creation state
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [isAddingNewCategory, setIsAddingNewCategory] = useState(false);
+  const [newCategoryInput, setNewCategoryInput] = useState("");
 
   // Add Product Form State
   const [formData, setFormData] = useState({
@@ -87,7 +108,26 @@ export default function InventoryPage() {
     }
   };
 
-  const categories = ["All", ...Array.from(new Set(products.map((p) => p.category)))];
+  const availableCategories = Array.from(
+    new Set([
+      ...DEFAULT_CATEGORIES,
+      ...products.map((p) => p.category).filter(Boolean),
+      ...customCategories,
+    ])
+  );
+
+  const categories = ["All", ...Array.from(new Set([...products.map((p) => p.category), ...customCategories]))];
+
+  const handleSaveNewCategory = () => {
+    const trimmed = newCategoryInput.trim();
+    if (!trimmed) return;
+    if (!customCategories.includes(trimmed)) {
+      setCustomCategories((prev) => [...prev, trimmed]);
+    }
+    setFormData((prev) => ({ ...prev, category: trimmed }));
+    setIsAddingNewCategory(false);
+    setNewCategoryInput("");
+  };
 
   return (
     <div className="space-y-6">
@@ -271,16 +311,70 @@ export default function InventoryPage() {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Category
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    placeholder="Grains"
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-slate-700">
+                      Category
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingNewCategory(!isAddingNewCategory);
+                        setNewCategoryInput("");
+                      }}
+                      className="text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                    >
+                      {isAddingNewCategory ? "← Select Existing" : "+ Add New Category"}
+                    </button>
+                  </div>
+
+                  {isAddingNewCategory ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={newCategoryInput}
+                        onChange={(e) => setNewCategoryInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleSaveNewCategory();
+                          }
+                        }}
+                        placeholder="Type new category..."
+                        autoFocus
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50/20 font-semibold text-slate-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveNewCategory}
+                        disabled={!newCategoryInput.trim()}
+                        className="px-2.5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold whitespace-nowrap shadow-xs"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.category}
+                      onChange={(e) => {
+                        if (e.target.value === "__ADD_NEW__") {
+                          setIsAddingNewCategory(true);
+                          setNewCategoryInput("");
+                        } else {
+                          setFormData({ ...formData, category: e.target.value });
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium text-slate-800"
+                    >
+                      {availableCategories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                      <option value="__ADD_NEW__" className="font-bold text-blue-600">
+                        + Add New Category...
+                      </option>
+                    </select>
+                  )}
                 </div>
 
                 <div>

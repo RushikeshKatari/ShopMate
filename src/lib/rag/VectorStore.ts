@@ -71,7 +71,10 @@ export class VectorStore {
   private tokenize(text: string): string[] {
     return text
       .toLowerCase()
-      .replace(/[^a-z0-9₹\s]/g, " ")
+      // Keep Indic scripts (including Telugu) as searchable tokens. `\p{L}`
+      // and `\p{N}` are supported by the Android/modern-browser JS engines
+      // targeted by this project.
+      .replace(/[^\p{L}\p{N}₹\s]/gu, " ")
       .split(/\s+/)
       .filter(t => t.length > 1 && !STOP_WORDS.has(t));
   }
@@ -81,6 +84,7 @@ export class VectorStore {
     const tf = new Map<string, number>();
     for (const t of tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
     // Normalize by doc length
+    if (tokens.length === 0) return tf;
     for (const [t, count] of tf) tf.set(t, count / tokens.length);
     return tf;
   }

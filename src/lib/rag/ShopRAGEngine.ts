@@ -44,6 +44,7 @@ export interface RAGQuery {
 export class ShopRAGEngine {
   private store = new VectorStore();
   private lastIndexedShop: string | null = null;
+  private corpusRevision: string | null = null;
 
   // ---------------------------------------------------------------------------
   // Public API
@@ -56,7 +57,7 @@ export class ShopRAGEngine {
     // R — Retrieve
     await this.ensureIndexed(q.shopId);
     const queryText = this.buildQueryText(q);
-    const retrieved = this.store.search(queryText, 5);
+    const retrieved = this.store.search(queryText, 5, doc => doc.metadata.shopId === q.shopId);
     const retrievalMs = Date.now() - t0;
 
     // A — Augment
@@ -163,18 +164,52 @@ export class ShopRAGEngine {
   // RAG internals
   // ---------------------------------------------------------------------------
 
-  /** Build or refresh the TF-IDF corpus from the shop's transactions */
+  /** Build or refresh the TF-IDF corpus from the shop's real local records. */
   private async ensureIndexed(shopId: string) {
-    if (this.lastIndexedShop === shopId && this.store.size > 0) return;
+    // The old cache only indexed a shop once per server process, which meant
+    // new sales/purchases never appeared in retrieval. A compact database
+    // revision check keeps the in-memory index fresh without holding another
+    // large model or a permanent background task in memory.
+    const [transactionRevision, productRevision, customerRevision] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: { shopId },
+        _count: { _all: true },
+        _max: { createdAt: true },
+      }),
+      prisma.product.aggregate({
+        where: { shopId },
+        _count: { _all: true },
+        _max: { updatedAt: true },
+      }),
+      prisma.customer.aggregate({
+        where: { shopId },
+        _count: { _all: true },
+        _max: { updatedAt: true },
+      }),
+    ]);
+    const revision = [
+      transactionRevision._count._all,
+      transactionRevision._max.createdAt?.toISOString() ?? "",
+      productRevision._count._all,
+      productRevision._max.updatedAt?.toISOString() ?? "",
+      customerRevision._count._all,
+      customerRevision._max.updatedAt?.toISOString() ?? "",
+    ].join(":");
 
-    const transactions = await prisma.transaction.findMany({
+    if (this.lastIndexedShop === shopId && this.corpusRevision === revision) return;
+
+    const [transactions, products, customers] = await Promise.all([
+      prisma.transaction.findMany({
       where: { shopId },
       orderBy: { createdAt: "desc" },
       take: 500,
       include: { product: true, customer: true },
-    });
+      }),
+      prisma.product.findMany({ where: { shopId } }),
+      prisma.customer.findMany({ where: { shopId } }),
+    ]);
 
-    const docs: VectorDocument[] = transactions.map(t => ({
+    const transactionDocs: VectorDocument[] = transactions.map(t => ({
       id: t.id,
       text: [
         t.type,
@@ -185,7 +220,7 @@ export class ShopRAGEngine {
         t.quantity,
         t.unit,
         t.paymentMethod,
-      ].filter(Boolean).join(" "),
+      ].filter(value => value !== null && value !== undefined && value !== "").join(" "),
       metadata: {
         shopId: t.shopId,
         type: t.type,
@@ -196,8 +231,24 @@ export class ShopRAGEngine {
       },
     }));
 
-    this.store.load(docs);
+    // Products and khata balances are indexed as descriptive documents. They
+    // improve natural-language retrieval, but the transaction services and
+    // exact query handlers remain the source of truth for every stock/money
+    // answer and update.
+    const productDocs: VectorDocument[] = products.map(product => ({
+      id: `product:${product.id}`,
+      text: `product ${product.name} category ${product.category} stock ${product.currentStock} ${product.unit} minimum stock ${product.minimumStock} purchase price ₹${product.purchasePrice} selling price ₹${product.sellingPrice}`,
+      metadata: { shopId, kind: "product", productId: product.id, productName: product.name },
+    }));
+    const customerDocs: VectorDocument[] = customers.map(customer => ({
+      id: `customer:${customer.id}`,
+      text: `customer ${customer.name} khata outstanding balance ₹${customer.outstandingBalance} phone ${customer.phone ?? ""}`,
+      metadata: { shopId, kind: "customer", customerId: customer.id, customerName: customer.name },
+    }));
+
+    this.store.load([...transactionDocs, ...productDocs, ...customerDocs]);
     this.lastIndexedShop = shopId;
+    this.corpusRevision = revision;
   }
 
   private buildQueryText(q: RAGQuery): string {

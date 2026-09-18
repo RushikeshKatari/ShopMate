@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import QRCode from "qrcode";
 import { KhataService } from "./KhataService";
+import { createUpiPaymentUri } from "@/lib/payments/upi";
 
 export class PaymentService {
   /**
@@ -14,20 +15,26 @@ export class PaymentService {
   }) {
     const { shopId, customerId, amount, note = "Khata Bill Settlement" } = params;
 
-    const [shop, customer] = await Promise.all([
+    const [shop, customer, settings] = await Promise.all([
       prisma.shop.findUnique({ where: { id: shopId } }),
-      prisma.customer.findUnique({ where: { id: customerId } }),
+      prisma.customer.findFirst({ where: { id: customerId, shopId } }),
+      prisma.setting.findUnique({ where: { shopId } }),
     ]);
 
     if (!shop || !customer) {
       throw new Error("Shop or customer not found");
     }
+    if (!settings?.upiId) {
+      throw new Error("Add your UPI ID in Settings before generating a payment QR code.");
+    }
 
-    // Standard NPCI UPI URI Scheme
-    const pa = "shopmate.pay@upi"; // Demo VPA
-    const pn = encodeURIComponent(shop.name);
-    const tn = encodeURIComponent(`${note} - ${customer.name}`);
-    const upiUri = `upi://pay?pa=${pa}&pn=${pn}&am=${amount.toFixed(2)}&cu=INR&tn=${tn}`;
+    // The QR recipient is always the UPI ID saved by this shop owner.
+    const upiUri = createUpiPaymentUri({
+      upiId: settings.upiId,
+      payeeName: shop.name,
+      amount,
+      note: `${note} - ${customer.name}`,
+    });
 
     const qrDataUrl = await QRCode.toDataURL(upiUri, {
       width: 280,
@@ -58,6 +65,7 @@ export class PaymentService {
       amount,
       customerName: customer.name,
       shopName: shop.name,
+      recipientUpiId: settings.upiId,
       status: "PENDING",
     };
   }
@@ -76,15 +84,18 @@ export class PaymentService {
       return { success: true, message: "Payment already processed", payment };
     }
 
-    // Atomically settle Khata through KhataService
-    const result = await KhataService.recordPayment({
-      shopId: payment.shopId,
-      customerName: payment.customer!.name,
-      amount: payment.amount,
-      paymentMethod: "UPI",
-      source: "SYSTEM",
-      bypassOverpaymentCheck: true,
-    });
+    // If customer is attached, atomically settle Khata through KhataService
+    let khataResult: any = null;
+    if (payment.customer) {
+      khataResult = await KhataService.recordPayment({
+        shopId: payment.shopId,
+        customerName: payment.customer.name,
+        amount: payment.amount,
+        paymentMethod: "UPI",
+        source: "SYSTEM",
+        bypassOverpaymentCheck: true,
+      });
+    }
 
     // Update payment record to SUCCESS
     const updatedPayment = await prisma.payment.update({
@@ -98,8 +109,10 @@ export class PaymentService {
     return {
       success: true,
       payment: updatedPayment,
-      customer: result.customer,
-      speech_response: `Payment received. ${result.customer.name}'s outstanding balance is now ₹${result.newBalance}.`,
+      customer: khataResult?.customer,
+      speech_response: khataResult?.customer
+        ? `Payment received. ${khataResult.customer.name}'s outstanding balance is now ₹${khataResult.newBalance}.`
+        : `Payment of ₹${payment.amount.toLocaleString("en-IN")} successfully received and verified.`,
     };
   }
 }

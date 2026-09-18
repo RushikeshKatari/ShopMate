@@ -12,10 +12,20 @@ export const SUPPORTED_INTENTS = [
   "get_stock",
   "get_customer_balance",
   "get_daily_sales",
+  "get_profit_summary",
+  "get_low_stock",
+  "get_out_of_stock",
+  "list_products",
+  "get_khata_summary",
   "get_transaction_history",
   "create_customer",
   "create_product",
   "update_stock",
+  "greeting",
+  "help",
+  "business_overview",
+  "confirm_action",
+  "cancel_action",
   "unknown",
 ] as const;
 
@@ -30,6 +40,8 @@ export interface AICommandResult {
   confirmation_message?: string;
   clarification_question?: string;
   speech_response?: string;
+  speech_response_telugu?: string;
+  is_telugu?: boolean;
   raw_response?: string;
 }
 
@@ -94,6 +106,7 @@ export const GetCustomerBalanceSchema = z.object({
 export interface AIContext {
   shopName: string;
   currency: string;
+  language?: string;
   products: Array<{
     id: string;
     name: string;

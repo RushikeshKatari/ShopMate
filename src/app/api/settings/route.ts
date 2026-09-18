@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireShopSession } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { normalizeUpiId } from "@/lib/payments/upi";
 
 export async function GET() {
   try {
@@ -43,7 +44,9 @@ export async function PUT(req: Request) {
       offlineMode,
       phone,
       address,
+      upiId,
     } = body;
+    const normalizedUpiId = upiId === undefined ? undefined : normalizeUpiId(upiId);
 
     const [updatedSettings, updatedShop] = await prisma.$transaction([
       prisma.setting.upsert({
@@ -55,11 +58,13 @@ export async function PUT(req: Request) {
           ...(voiceResponseEnabled !== undefined && { voiceResponseEnabled }),
           ...(lowStockNotifications !== undefined && { lowStockNotifications }),
           ...(offlineMode !== undefined && { offlineMode }),
+          ...(normalizedUpiId !== undefined && { upiId: normalizedUpiId }),
         },
         create: {
           shopId: session.shopId,
           shopName: shopName || session.shopName,
           language: language || "en-IN",
+          ...(normalizedUpiId !== undefined && { upiId: normalizedUpiId }),
         },
       }),
       prisma.shop.update({
@@ -74,6 +79,6 @@ export async function PUT(req: Request) {
 
     return NextResponse.json({ success: true, settings: updatedSettings, shop: updatedShop });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
 }

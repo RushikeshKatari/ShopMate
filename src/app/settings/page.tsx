@@ -32,6 +32,7 @@ export default function SettingsPage() {
     voiceResponseEnabled: true,
     lowStockNotifications: true,
     offlineMode: false,
+    upiId: "",
   });
 
   useEffect(() => {
@@ -52,6 +53,7 @@ export default function SettingsPage() {
               voiceResponseEnabled: data.settings.voiceResponseEnabled,
               lowStockNotifications: data.settings.lowStockNotifications,
               offlineMode: data.settings.offlineMode,
+              upiId: data.settings.upiId || "",
             });
           }
         }
@@ -174,6 +176,31 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* UPI QR recipient */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+            <span className="w-5 h-5 text-center text-base leading-5">₹</span>
+            <h3 className="text-base font-bold text-slate-900">UPI QR Payments</h3>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Receive payments at this UPI ID
+            </label>
+            <input
+              type="text"
+              inputMode="email"
+              autoCapitalize="none"
+              value={formData.upiId}
+              onChange={(e) => setFormData({ ...formData, upiId: e.target.value })}
+              placeholder="yourshop@bank"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="mt-1.5 text-[11px] text-slate-400">
+              Every QR code will send payment only to this UPI ID. Leave blank to disable QR generation.
+            </p>
+          </div>
+        </div>
+
         {/* AI & Voice Settings */}
         <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
@@ -191,9 +218,15 @@ export default function SettingsPage() {
                 onChange={(e) => setFormData({ ...formData, language: e.target.value })}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
               >
-                <option value="en-IN">Indian English + Hinglish (Recommended)</option>
+                <option value="te-IN">తెలుగు — Telugu (Venkatesh Voice Pack Active)</option>
+                <option value="en-IN">Indian English + Hinglish</option>
                 <option value="hi-IN">Hindi (Coming soon)</option>
               </select>
+              <p className="mt-1 text-[11px] text-slate-400">
+                {formData.language === "te-IN"
+                  ? "Packaged Voice: te_IN-venkatesh-medium (Telugu TTS active for spoken Kirana replies)"
+                  : "Standard Indian English voice synthesizer active."}
+              </p>
             </div>
 
             <div className="flex items-center justify-between py-2 border-t border-slate-100">

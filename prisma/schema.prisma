@@ -157,6 +157,7 @@ model Setting {
   voiceResponseEnabled   Boolean  @default(true)
   lowStockNotifications  Boolean  @default(true)
   offlineMode            Boolean  @default(false)
+  upiId                  String?
   updatedAt              DateTime @updatedAt
   shop                   Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 }

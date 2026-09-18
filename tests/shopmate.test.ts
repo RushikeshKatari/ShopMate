@@ -10,6 +10,8 @@ import { LocalNLPProvider } from "../src/lib/ai/local-nlp-provider";
 import { AIContext } from "../src/lib/ai/types";
 import { VectorStore } from "../src/lib/rag/VectorStore";
 import { DemandForecaster } from "../src/lib/rag/DemandForecaster";
+import { createUpiPaymentUri, normalizeUpiId } from "../src/lib/payments/upi";
+import { BillSplittingService } from "../src/services/BillSplittingService";
 
 describe("ShopMate Core Business & AI Test Suite", () => {
   let shopId: string;
@@ -268,6 +270,24 @@ describe("ShopMate Core Business & AI Test Suite", () => {
       expect(parsed.clarification_question).toContain("How many kg of Rice did you sell?");
     });
 
+    it("fills a purchase amount in a follow-up turn and calculates cost per unit", async () => {
+      const localNLP = new LocalNLPProvider();
+      const firstTurn = await localNLP.parseCommand("I bought 5 kg rice", dummyContext);
+      expect(firstTurn.intent).toBe("record_purchase");
+      expect(firstTurn.clarification_question).toContain("For how many rupees");
+
+      const secondTurn = await localNLP.parseCommand("500 rupees", {
+        ...dummyContext,
+        conversationState: {
+          pendingIntent: firstTurn.intent,
+          pendingEntities: firstTurn.entities,
+          missingSlot: "amount",
+        },
+      });
+      expect(secondTurn.entities.total_amount).toBe(500);
+      expect(secondTurn.entities.purchase_price_per_unit).toBe(100);
+    });
+
     // ── Telugu NLP Tests (use LocalNLPProvider which has Telugu support) ──
     const teluguNLP = new LocalNLPProvider();
 
@@ -297,6 +317,59 @@ describe("ShopMate Core Business & AI Test Suite", () => {
       expect(parsed.entities.customer_name).toBe("Ramesh");
       expect(parsed.entities.product_name).toBe("Rice");
       expect(parsed.entities.quantity).toBe(2);
+    });
+
+    it("parses Telugu-script purchase and produces a Telugu response", async () => {
+      const parsed = await teluguNLP.parseCommand("10 కేజీల బియ్యం ₹520 కి కొన్నాను", {
+        ...dummyContext,
+        language: "te-IN",
+      });
+      expect(parsed.intent).toBe("record_purchase");
+      expect(parsed.entities.product_name).toBe("Rice");
+      expect(parsed.entities.quantity).toBe(10);
+      expect(parsed.entities.total_amount).toBe(520);
+      expect(parsed.is_telugu).toBe(true);
+    });
+
+    it("matches Telugu-script customer names against the khata ledger", async () => {
+      const parsed = await teluguNLP.parseCommand("రమేష్ 2 కేజీల బియ్యం ఖాతాలో తీసుకున్నాడు", {
+        ...dummyContext,
+        language: "te-IN",
+      });
+      expect(parsed.intent).toBe("record_credit_sale");
+      expect(parsed.entities.customer_name).toBe("Ramesh");
+      expect(parsed.entities.product_name).toBe("Rice");
+      expect(parsed.entities.quantity).toBe(2);
+    });
+
+    it("handles Telugu greeting and spoken confirmation intents", async () => {
+      const greeting = await teluguNLP.parseCommand("నమస్కారం", { ...dummyContext, language: "te-IN" });
+      const confirmation = await teluguNLP.parseCommand("అవును", { ...dummyContext, language: "te-IN" });
+      expect(greeting.intent).toBe("greeting");
+      expect(greeting.speech_response_telugu).toContain("నమస్కారం");
+      expect(confirmation.intent).toBe("confirm_action");
+    });
+  });
+
+  // ── UPI QR Tests ──────────────────────────────────────────────────────────
+  describe("UPI QR recipient", () => {
+    it("normalizes a valid shop UPI ID and places it in the payment URI", () => {
+      const upiId = normalizeUpiId("  Ramesh.Store@OKHDFC  ");
+      expect(upiId).toBe("ramesh.store@okhdfc");
+
+      const uri = createUpiPaymentUri({
+        upiId: upiId!,
+        payeeName: "Ramesh Kirana Store",
+        amount: 124,
+        note: "Khata Settlement - Ramesh",
+      });
+      const query = new URL(uri).searchParams;
+      expect(query.get("pa")).toBe("ramesh.store@okhdfc");
+      expect(query.get("am")).toBe("124.00");
+    });
+
+    it("rejects malformed UPI IDs", () => {
+      expect(() => normalizeUpiId("not a UPI ID")).toThrow("valid UPI ID");
     });
   });
 
@@ -332,6 +405,18 @@ describe("ShopMate Core Business & AI Test Suite", () => {
 
       const results = store.search("zzzzxqwhjk", 3);
       expect(results.length).toBe(0);
+    });
+
+    it("VectorStore: retains Telugu-script terms for offline retrieval", () => {
+      const store = new VectorStore();
+      store.load([
+        { id: "1", text: "బియ్యం 5 కిలోలు అమ్మకం", metadata: { product: "Rice" } },
+        { id: "2", text: "చక్కెర కొనుగోలు 10 కిలోలు", metadata: { product: "Sugar" } },
+      ]);
+
+      const results = store.search("బియ్యం అమ్మకం", 1);
+      expect(results).toHaveLength(1);
+      expect(results[0].document.metadata.product).toBe("Rice");
     });
 
     it("DemandForecaster: computes 7-day moving average correctly", () => {
@@ -372,4 +457,168 @@ describe("ShopMate Core Business & AI Test Suite", () => {
       expect(result.velocityTrend).toBe("rising");
     });
   });
+
+  // ── SmartCheckout Enterprise Bill-Splitting Engine Tests ───────────────────
+  describe("SmartCheckout Enterprise Bill-Splitting Engine (Specification Cases 1-7)", () => {
+    // Case 1: Standard Fit
+    // Cart: ₹500 + ₹600 + ₹700 -> Result: ₹1,800 in one bill
+    it("Case 1: ₹500 + ₹600 + ₹700 packs into exactly one bill of ₹1,800", () => {
+      const result = BillSplittingService.splitCart([
+        { name: "Oil", unitPrice: 500, quantity: 1 },
+        { name: "Rice", unitPrice: 600, quantity: 1 },
+        { name: "Dal", unitPrice: 700, quantity: 1 },
+      ]);
+
+      expect(result.highValueBills).toHaveLength(0);
+      expect(result.standardBills).toHaveLength(1);
+      expect(result.standardBills[0].total).toBe(1800);
+      expect(result.standardBills[0].items).toHaveLength(3);
+    });
+
+    // Case 2: Best-Fit Split
+    // Cart: ₹1,000 + ₹900 + ₹500 -> Result: Bill 1 = ₹1,900, Bill 2 = ₹500
+    it("Case 2: ₹1,000 + ₹900 + ₹500 splits into Bill 1 (₹1,900) and Bill 2 (₹500)", () => {
+      const result = BillSplittingService.splitCart([
+        { name: "Item A", unitPrice: 1000, quantity: 1 },
+        { name: "Item B", unitPrice: 900, quantity: 1 },
+        { name: "Item C", unitPrice: 500, quantity: 1 },
+      ]);
+
+      expect(result.highValueBills).toHaveLength(0);
+      expect(result.standardBills).toHaveLength(2);
+      expect(result.standardBills[0].total).toBe(1900); // 1000 + 900
+      expect(result.standardBills[1].total).toBe(500); // 500
+    });
+
+    // Case 3: High-Value + Standard
+    // Cart: ₹500 + ₹700 + ₹900 + ₹2,500 -> Result: Bill 1 = ₹1,900, Bill 2 = ₹2,500 (standalone)
+    it("Case 3: ₹500 + ₹700 + ₹900 + ₹2,500 puts ₹2,500 in standalone bill and packs standard items into ₹1,900 bill", () => {
+      const result = BillSplittingService.splitCart([
+        { name: "Item 1", unitPrice: 500, quantity: 1 },
+        { name: "Item 2", unitPrice: 700, quantity: 1 },
+        { name: "Item 3", unitPrice: 900, quantity: 1 },
+        { name: "TV", unitPrice: 2500, quantity: 1 },
+      ]);
+
+      expect(result.highValueBills).toHaveLength(1);
+      expect(result.highValueBills[0].total).toBe(2500);
+      expect(result.highValueBills[0].items[0].name).toBe("TV");
+      expect(result.highValueBills[0].reason).toContain("exceeds threshold");
+
+      // Remaining items: 900 + 700 + 500 = 2100 > 1999, so 900 + 700 = 1600 or 900 + 700 + 500 packed deterministically
+      const totalStandard = result.standardBills.reduce((s, b) => s + b.total, 0);
+      expect(totalStandard).toBe(2100);
+      for (const bill of result.standardBills) {
+        expect(bill.total).toBeLessThanOrEqual(1999);
+      }
+    });
+
+    // Case 4: Multiple High-Value Items
+    // Cart: ₹2,500 + ₹5,000 + ₹300 + ₹400 + ₹500 -> Result: Bill 1 = ₹2,500, Bill 2 = ₹5,000, Bill 3 = ₹1,200
+    it("Case 4: ₹2,500 + ₹5,000 + ₹300 + ₹400 + ₹500 generates two high-value bills and one standard bill of ₹1,200", () => {
+      const result = BillSplittingService.splitCart([
+        { name: "Appliance A", unitPrice: 2500, quantity: 1 },
+        { name: "Appliance B", unitPrice: 5000, quantity: 1 },
+        { name: "Small 1", unitPrice: 300, quantity: 1 },
+        { name: "Small 2", unitPrice: 400, quantity: 1 },
+        { name: "Small 3", unitPrice: 500, quantity: 1 },
+      ]);
+
+      expect(result.highValueBills).toHaveLength(2);
+      expect(result.highValueBills[0].total).toBe(2500);
+      expect(result.highValueBills[1].total).toBe(5000);
+
+      expect(result.standardBills).toHaveLength(1);
+      expect(result.standardBills[0].total).toBe(1200); // 300 + 400 + 500
+    });
+
+    // Case 5: Exact ₹1,999 Threshold
+    it("Case 5: ₹1,999 item generates exactly one standard bill of ₹1,999", () => {
+      const result = BillSplittingService.splitCart([
+        { name: "Cooktop", unitPrice: 1999, quantity: 1 },
+      ]);
+
+      expect(result.highValueBills).toHaveLength(0);
+      expect(result.standardBills).toHaveLength(1);
+      expect(result.standardBills[0].total).toBe(1999);
+    });
+
+    // Case 6: Exact ₹2,000 Boundary Condition
+    it("Case 6: Explicitly configurable boundary condition for ₹2,000", () => {
+      // Config A: GREATER_THAN (default)
+      const resultDefault = BillSplittingService.splitCart(
+        [{ name: "Grinder", unitPrice: 2000, quantity: 1 }],
+        { highValueThreshold: 2000, boundaryRule: "GREATER_THAN" }
+      );
+      expect(resultDefault.highValueBills).toHaveLength(0);
+
+      // Config B: GREATER_THAN_OR_EQUAL
+      const resultGte = BillSplittingService.splitCart(
+        [{ name: "Grinder", unitPrice: 2000, quantity: 1 }],
+        { highValueThreshold: 2000, boundaryRule: "GREATER_THAN_OR_EQUAL" }
+      );
+      expect(resultGte.highValueBills).toHaveLength(1);
+      expect(resultGte.highValueBills[0].total).toBe(2000);
+    });
+
+    // Case 7: Duplicate High-Value Products
+    // Cart: ₹2,500 × 2 -> Two separate high-value bills, never merged into ₹5,000
+    it("Case 7: Duplicate high-value products (₹2,500 × 2) generate two separate standalone bills", () => {
+      const result = BillSplittingService.splitCart([
+        { name: "Audio Speaker", unitPrice: 2500, quantity: 2 },
+      ]);
+
+      expect(result.highValueBills).toHaveLength(2);
+      expect(result.highValueBills[0].total).toBe(2500);
+      expect(result.highValueBills[1].total).toBe(2500);
+      expect(result.standardBills).toHaveLength(0);
+    });
+
+    // Deterministic Algorithm Verification
+    it("Deterministic: Same cart and configuration produces identical split outcome", () => {
+      const cart = [
+        { name: "Rice", unitPrice: 800, quantity: 1 },
+        { name: "Oil", unitPrice: 500, quantity: 1 },
+        { name: "TV", unitPrice: 25000, quantity: 1 },
+        { name: "Soap", unitPrice: 200, quantity: 1 },
+        { name: "Biscuits", unitPrice: 300, quantity: 1 },
+      ];
+
+      const run1 = BillSplittingService.splitCart(cart);
+      const run2 = BillSplittingService.splitCart(cart);
+
+      expect(JSON.stringify(run1)).toBe(JSON.stringify(run2));
+    });
+
+    // CheckoutSession Integration with Database & UPI QR Generation
+    it("createCheckoutSession: creates parent session CHK-*, child invoices, and UPI QR codes", async () => {
+      const session = await BillSplittingService.createCheckoutSession({
+        shopId,
+        items: [
+          { name: "Rice 5kg", unitPrice: 800, quantity: 1 },
+          { name: "Cooking Oil 2L", unitPrice: 500, quantity: 1 },
+          { name: "Smart TV", unitPrice: 25000, quantity: 1 },
+          { name: "Bath Soap", unitPrice: 200, quantity: 1 },
+          { name: "Biscuits", unitPrice: 300, quantity: 1 },
+        ],
+      });
+
+      expect(session.checkoutSessionId).toMatch(/^CHK-\d{8}-\d{6}$/);
+      expect(session.totalInvoicesCount).toBe(2); // TV (₹25,000) + Standard bucket (800+500+200+300 = ₹1,800)
+      expect(session.highValueInvoicesCount).toBe(1);
+      expect(session.standardInvoicesCount).toBe(1);
+      expect(session.totalCartValue).toBe(26800);
+
+      // Verify each invoice has dynamic UPI QR code
+      for (const inv of session.invoices) {
+        expect(inv.invoiceNumber).toMatch(/^INV-\d{3}$/);
+        expect(inv.parentCheckoutId).toBe(session.checkoutSessionId);
+        expect(inv.upiUri).toContain("upi://pay");
+        expect(inv.qrDataUrl).toMatch(/^data:image\/png;base64,/);
+        expect(inv.paymentStatus).toBe("PENDING");
+        expect(inv.paymentId).toBeDefined();
+      }
+    });
+  });
 });
+
